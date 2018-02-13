@@ -36,43 +36,47 @@ server <- function(input, output) {
   # codes <- get_codes()
   # hw_codes <- codes[grep('hrh', codes$label, ignore.case=T),]
   # glimpse(codes)
-  child_codes <- c('imr')#, 'nmr', 'u5mr')
+  child_codes <- c('imr', 'nmr', 'u5mr')
   for (i in child_codes){
     #gets the data from WHO
     assign(paste0(i, '_data'), as_tibble(data.table(get_data(i))[datasource == 'DHS',]))
     x <- paste0(i, '_data')
-    setnames(get(eval(x)), paste(i,colnames(get(eval(x))), sep="_"))
+    # setnames(get(eval(x)), paste(i,colnames(get(eval(x))), sep="_"))
     assign(eval(x), get(eval(x)) %>%
-             separate(get(eval(paste0(i, '_value'))), into = c(paste0(i, '_mean'), paste0(i, '_stdev')), sep = " ", fill = "right", convert = T))
+             separate('value', into = c('mean', 'stdev'), sep = " ", fill = "right", convert = T))
+    if(!exists("rawData")){
+      rawData <- as_tibble(data.table(get(eval(x))))
+    }
+    else rawData <- rbind(rawData, get(eval(x)))
   }
   #gets healthcare worker data
   hw <- data.table(get_data("HRH_29"))
   names(hw) <- paste0( "hw_", names(hw))
   #joins the data down to a dense matrix
-  comp_data <- left_join(hw, imr_data, by = c("hw_country"="imr_country", "hw_year"="imr_year"))
-  final_data <- comp_data[,c("hw_country", "hw_value", "imr_mean")]
-  final_data <- filter(final_data, !is.na(imr_mean)) %>%
-    filter(imr_mean != 'No') %>%
+  rawData <- left_join(hw, rawData, by = c("hw_country"="country", "hw_year"="year"))
+  final_data <- rawData[,c("gho","hw_country", "hw_value", "mean")]
+  final_data <- filter(final_data, !is.na(mean)) %>%
+    filter(mean != 'No') %>%
     as.tibble() %>%
-    group_by(hw_country) %>%
+    group_by(hw_country, gho) %>%
     arrange(hw_country)
-  final_data$imr_mean <- as.numeric(final_data$imr_mean)
-  final_data <- final_data %>% summarise(imr_mean = mean(imr_mean), hw_mean = mean(hw_value))
+  final_data$mean <- as.numeric(final_data$mean)
+  final_data <- final_data %>% summarise(mean = mean(mean), hw_mean = mean(hw_value))
   
-  log.model <-lm(log(imr_mean) ~ hw_mean, final_data)
-  log.model.df <- data.frame(x = final_data$hw_mean,
-                             y = exp(fitted(log.model)))
+  # log.model <-lm(log(imr_mean) ~ hw_mean, final_data)
+  # log.model.df <- data.frame(x = final_data$hw_mean,
+  #                            y = exp(fitted(log.model)))
   
   
   output$scatterPlot <- renderPlot({
     # draw the scatter plot
-    ggplot(final_data, mapping = aes(x=hw_mean, y=imr_mean, color=hw_country)) +
-      labs(x="Health Workers per 1000", y="infant deaths per 1000 live births") +
-      geom_point() +
-      geom_smooth(data = log.model.df, aes(x, y, color = "Log Model"), size = 1, linetype = 1)
+    ggplot(final_data, mapping = aes(x=hw_mean, y=mean, color=gho)) +
+      labs(x="Health Workers per 1000", y="mortality per 1000 live births") +
+      geom_point() #+
+      # geom_smooth(data = log.model.df, aes(x, y, color = "Log Model"), size = 1, linetype = 1)
   })
   
-  output$table <- renderTable({brushedPoints(final_data, input$plot_brush, xvar = "hw_mean", yvar = "imr_mean")})
+  output$table <- renderTable({brushedPoints(final_data, input$plot_brush, xvar = "hw_mean", yvar = "mean")})
   
 }
 
