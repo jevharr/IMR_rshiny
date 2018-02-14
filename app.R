@@ -43,7 +43,7 @@ server <- function(input, output) {
     x <- paste0(i, '_data')
     # setnames(get(eval(x)), paste(i,colnames(get(eval(x))), sep="_"))
     assign(eval(x), get(eval(x)) %>%
-             separate('value', into = c('mean', 'stdev'), sep = " ", fill = "right", convert = T))
+             separate('value', into = c('mort_mean', 'stdev'), sep = " ", fill = "right", convert = T))
     if(!exists("rawData")){
       rawData <- as_tibble(data.table(get(eval(x))))
     }
@@ -54,26 +54,44 @@ server <- function(input, output) {
   names(hw) <- paste0( "hw_", names(hw))
   #joins the data down to a dense matrix
   rawData <- left_join(hw, rawData, by = c("hw_country"="country", "hw_year"="year"))
-  final_data <- rawData[,c("gho","hw_country", "hw_value", "mean")]
-  final_data <- filter(final_data, !is.na(mean)) %>%
-    filter(mean != 'No') %>%
+  final_data <- rawData[,c("gho","hw_country", "hw_value", "mort_mean")]
+  final_data <- filter(final_data, !is.na(mort_mean)) %>%
+    filter(mort_mean != 'No') %>%
     as.tibble() %>%
     group_by(hw_country, gho) %>%
     arrange(hw_country)
-  final_data$mean <- as.numeric(final_data$mean)
-  final_data <- final_data %>% summarise(mean = mean(mean), hw_mean = mean(hw_value))
+  final_data$mort_mean <- as.numeric(final_data$mort_mean)
+  final_data <- final_data %>% summarise(mort_mean = mean(mort_mean), hw_mean = mean(hw_value))
   
   # log.model <-lm(log(imr_mean) ~ hw_mean, final_data)
   # log.model.df <- data.frame(x = final_data$hw_mean,
   #                            y = exp(fitted(log.model)))
+  imr <- final_data[grep("Infant", final_data$gho), "mort_mean"][['mort_mean']]
+  nmr <- final_data[grep("Neonatal", final_data$gho), "mort_mean"][['mort_mean']]
+  u5mr <- final_data[grep("Under", final_data$gho), "mort_mean"][['mort_mean']]
+  hw <- unique(final_data$hw_mean)
   
+  imr.log.model <- lm(log(imr) ~ hw, final_data)
+  imr.log.model.df <- data.frame(x = final_data[grep("Infant", final_data$gho), "hw_mean"][["hw_mean"]],
+                                 y = exp(fitted(imr.log.model)))
+
+  nmr.log.model <-lm(log(nmr) ~ hw, final_data)
+  nmr.log.model.df <- data.frame(x = final_data[grep("Infant", final_data$gho), "hw_mean"][["hw_mean"]],
+                                 y = exp(fitted(nmr.log.model)))
+  u5mr.log.model <-lm(log(u5mr) ~ hw, final_data)
+  u5mr.log.model.df <- data.frame(x = final_data[grep("Infant", final_data$gho), "hw_mean"][["hw_mean"]],
+                                  y = exp(fitted(u5mr.log.model)))
   
   output$scatterPlot <- renderPlot({
+    group.colors <- data.table("Infant mortality rate (deaths per 1000 live births)"="#999999", "Neonatal mortality rate (deaths per 1000 live births)"="#E69F00", "Under-five mortality rate (deaths per 1000 live births)"="#56B4E9")
     # draw the scatter plot
-    ggplot(final_data, mapping = aes(x=hw_mean, y=mean, color=gho)) +
+    sp <- ggplot(final_data, mapping = aes(x=hw_mean, y=mort_mean, color=gho))
+    sp + 
+      geom_point() +
       labs(x="Health Workers per 1000", y="mortality per 1000 live births") +
-      geom_point() #+
-      # geom_smooth(data = log.model.df, aes(x, y, color = "Log Model"), size = 1, linetype = 1)
+      geom_smooth(data = imr.log.model.df, aes(x, y, color=".log.fit"), size = 1, linetype = 1) +
+      geom_smooth(data = nmr.log.model.df, aes(x, y, color=".log.fit"), size = 1, linetype = 1) +
+      geom_smooth(data = u5mr.log.model.df, aes(x, y, color=".log.fit"), size = 1, linetype = 1)
   })
   
   output$table <- renderTable({brushedPoints(final_data, input$plot_brush, xvar = "hw_mean", yvar = "mean")})
