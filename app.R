@@ -63,7 +63,7 @@ server <- function(input, output) {
     arrange(hw_country)
   final_data$mort_mean <- as.numeric(final_data$mort_mean)
   final_data <- final_data %>% summarise(mort_mean = mean(mort_mean), hw_mean = mean(hw_value))
-  final_data <- left_join(final_data, group.colors)
+  # final_data <- left_join(final_data, group.colors)
   
   # log.model <-lm(log(imr_mean) ~ hw_mean, final_data)
   # log.model.df <- data.frame(x = final_data$hw_mean,
@@ -87,13 +87,14 @@ server <- function(input, output) {
   
   output$scatterPlot <- renderPlot({
     # draw the scatter plot
-    sp <- ggplot(final_data, mapping = aes(x=hw_mean, y=mort_mean, color=gho)) +
-      geom_point() +
-      labs(x="Health Workers per 1000", y="mortality per 1000 live births") +
-      guides(color=guide_legend(title="Mortality Type")) +
-      geom_smooth(data = imr.log.model.df, aes(x, y, gho), size = 1, linetype = 1) +
-      geom_smooth(data = nmr.log.model.df, aes(x, y, gho), size = 1, linetype = 1) +
-      geom_smooth(data = u5mr.log.model.df, aes(x, y, gho), size = 1, linetype = 1)
+    sp <- ggplot(final_data, mapping = aes(x=hw_mean, y=mort_mean, color=gho))
+      sp +
+        geom_point() +
+        labs(x="Health Workers per 1000", y="mortality per 1000 live births") +
+        guides(color=guide_legend(title="Mortality Type")) +
+        geom_smooth(data = imr.log.model.df, aes(x, y, gho), size = 1, linetype = 1) +
+        geom_smooth(data = nmr.log.model.df, aes(x, y, gho), size = 1, linetype = 1) +
+        geom_smooth(data = u5mr.log.model.df, aes(x, y, gho), size = 1, linetype = 1)
   })
   
   output$table <- renderTable({brushedPoints(final_data, input$plot_brush, xvar = "hw_mean", yvar = "mort_mean")})
